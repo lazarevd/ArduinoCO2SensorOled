@@ -19,21 +19,26 @@ int dispCO2;
 #define MHZ_TX 9
 #define CHART_SIZE 70
 #define KALMAN_ARRAY_SIZE 5
+#define BUTTON_PIN 18
 
+#define CO2_BASE 410
+#define CO2_GREEN_MAX 1000
+#define CO2_YELLOW_MAX 2000
+#define CO2_MAX_VALUE 5000
 
 int const MEASURE_DELAY = 5500; // ms, minimum = 5000, быстрее mhx19 просто не обновляется
+unsigned long timer;
+
 long const GRAPH_TICK_TIME_RANGE = 27500; //ms
-int measuresNumber;//сколько проводить измерений на столбец графика !!! измерений должно быть БОЛЬШЕ, чем значений в массиве калмана
+int measuresNumber;//сколько проводить измерений на столбец графика  измерений должно быть БОЛЬШЕ!!!, чем значений в массиве калмана
 int kalmanMeasuresArray[KALMAN_ARRAY_SIZE];//массив для фильтра Калмана (сглаживание нескольких последних значений)
 int currentMeasureCount = 0;//сколько всего изменений провели для текущего столбца
-int chartValues[CHART_SIZE]; //70 столбцов в графике = 11 часов, если по 10 минут столбец
+int chartValues[CHART_SIZE]; //70 столбцов в графике = 11 часов, если по 10 минут столбец или около 30 минут, если по 27.5 секунд
 int chartValuesCount = 0; //считаем сколько столбцов заполнено, чтобы сдвигать график или дополнять
 
 
-int CO2_BASE = 410;
-int CO2_GREEN_MAX = 1000;
-int CO2_YELLOW_MAX = 2000;
-#define CO2_MAX_VALUE 5000
+boolean buttonWasPressed = false;
+boolean buttonPressed = false;
 
 
 int redP = 5;
@@ -50,7 +55,7 @@ void setup() {
     Serial.println(F("SSD1306 allocation failed"));
     for(;;);
   }
-  delay(100);
+  pinMode(BUTTON_PIN, INPUT);
   display.clearDisplay();
   display.setTextSize(2);
   display.setTextColor(WHITE);
@@ -66,7 +71,6 @@ void setup() {
   mhz19.begin(MHZ_TX, MHZ_RX);
   mhz19.setAutoCalibration(false);
   mhz19.getStatus();    // первый запрос, в любом случае возвращает -1
-  delay(500);
   if (mhz19.getStatus() == 0) {
     display.print(F("OK"));
     Serial.println(F("OK"));
@@ -74,15 +78,35 @@ void setup() {
     display.print(F("ERROR"));
     Serial.println(F("ERROR"));
   }
+  timer = millis();//устанавливаем таймер
 }
 
+
 void loop() {
-  delay(MEASURE_DELAY);//задержка нужна чтобы не было проблем с перезаливкой прошивки
+  if (digitalRead(BUTTON_PIN) == HIGH) {
+     if (!buttonWasPressed) {
+      buttonPressed = true;
+      buttonWasPressed = true;
+     } else {
+      buttonPressed = false;
+      }
+ } else {
+  buttonWasPressed = false;
+ }
+
+  if (buttonPressed) {
+    Serial.println("Button");
+    buttonPressed = false;
+  }
+ 
+  if (millis()-timer > MEASURE_DELAY) {//задержка нужна чтобы не опрашивать датчик слишком часто
+  timer = millis();
   dispCO2 = mhz19.getPPM();
   updateKalmanArray(dispCO2, kalmanMeasuresArray);
-  updateChartArray(chartValues, &chartValuesCount, &currentMeasureCount, measuresNumber);
+  updateChartArray(chartValues, kalmanMeasuresArray, &chartValuesCount, &currentMeasureCount, measuresNumber);
   drawGraph(chartValues, CHART_SIZE, &chartValuesCount, dispCO2);
   setColorByCo2(dispCO2);
+  }
  }
 
  
@@ -91,15 +115,9 @@ void updateKalmanArray(int currentValue, int* kalmanArray)  {//добавляе�
       kalmanArray[i] = kalmanArray[i+1];
     }
     kalmanArray[KALMAN_ARRAY_SIZE-1] = currentValue;
-
-  String st = "kalman arr: cur measure: " + String(currentValue) + ": ";
-  for (int i=0;i<KALMAN_ARRAY_SIZE;i++) {
-    st = st + " " + kalmanArray[i];
-  }
-  Serial.println(st);
 }
  
-void updateChartArray(int* chart, int* chartCount, int* measureCount, int measuresForTick) {
+void updateChartArray(int* chart, int* kalmanArray, int* chartCount, int* measureCount, int measuresForTick) {
     (*measureCount)++;
     if (*measureCount >= measuresForTick) {//когда измерений на столбец достаточно, смещаем предыдущие значения
       for (int i = CHART_SIZE-1 ; i >= 1; i--) {
@@ -110,7 +128,7 @@ void updateChartArray(int* chart, int* chartCount, int* measureCount, int measur
     *measureCount = 0;
     (*chartCount)++;
   }
-  int filterResult = kalmanFilter(kalmanMeasuresArray, KALMAN_ARRAY_SIZE, 15);
+  int filterResult = kalmanFilter(kalmanArray, KALMAN_ARRAY_SIZE, 15);
   Serial.println("filterResult: " + String(filterResult) + " measureCount: " + String(*measureCount) + "/" + String(measuresNumber));
   if (*measureCount <= 1) {
     chart[0] = filterResult;
