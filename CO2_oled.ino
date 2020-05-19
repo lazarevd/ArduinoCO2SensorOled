@@ -10,6 +10,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <MHZ19_uart.h>
+#include <avr/eeprom.h>
 MHZ19_uart mhz19;
 int dispCO2;
 
@@ -26,30 +27,45 @@ int dispCO2;
 #define CO2_YELLOW_MAX 2000
 #define CO2_MAX_VALUE 5000
 
-int const MEASURE_DELAY = 5500; // ms, minimum = 5000, быстрее mhx19 просто не обновляется
+int const MEASURE_DELAY = 5500; // ms, задержка между измерениями minimum = 5000, быстрее mhx19 просто не обновляется
 unsigned long timer;
 
 long const GRAPH_TICK_TIME_RANGE = 27500; //ms
-int measuresNumber;//сколько проводить измерений на столбец графика  измерений должно быть БОЛЬШЕ!!!, чем значений в массиве калмана
+long const GRAPH_TICK_TIME_RANGE24 = 600000; //ms
+int measuresForTick;//сколько проводить измерений на столбец графика  измерений должно быть БОЛЬШЕ!!!, чем значений в массиве калмана  = GRAPH_TICK_TIME_RANGE/MEASURE_DELAY;
 int kalmanMeasuresArray[KALMAN_ARRAY_SIZE];//массив для фильтра Калмана (сглаживание нескольких последних значений)
 int currentMeasureCount = 0;//сколько всего изменений провели для текущего столбца
-int chartValues[CHART_SIZE]; //70 столбцов в графике = 11 часов, если по 10 минут столбец или около 30 минут, если по 27.5 секунд
+int chartValues[CHART_SIZE]; //70 столбцов в графике = 11,6 часов, если по 10 минут столбец или около 32 минут, если по 27.5 секунд
 int chartValuesCount = 0; //считаем сколько столбцов заполнено, чтобы сдвигать график или дополнять
 
+int measuresForTick24;//сколько проводить измерений на столбец графика  измерений должно быть БОЛЬШЕ!!!, чем значений в массиве калмана
+int kalmanMeasuresArray24[KALMAN_ARRAY_SIZE];//массив для фильтра Калмана (сглаживание нескольких последних значений)
+int currentMeasureCount24 = 0;//сколько всего изменений провели для текущего столбца
+int chartValues24[CHART_SIZE]; //70 столбцов в графике = 11 часов, если по 10 минут столбец или около 30 минут, если по 27.5 секунд
+int chartValuesCount24 = 0; //считаем сколько столбцов заполнено, чтобы сдвигать график или дополнять
 
 boolean buttonWasPressed = false;
 boolean buttonPressed = false;
-
+boolean isDayGraph = false;
 
 int redP = 5;
 int greenP = 6;
 int blueP = 10;
 
+
+
+  struct SaveStruct {//структура для сохранения суточного графика
+    int values[CHART_SIZE];
+    int graphPosition;
+  };
+
+
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 void setup() {
-  measuresNumber = GRAPH_TICK_TIME_RANGE/MEASURE_DELAY;
+  measuresForTick = GRAPH_TICK_TIME_RANGE/MEASURE_DELAY;
+  measuresForTick24 = GRAPH_TICK_TIME_RANGE24/MEASURE_DELAY;
   Serial.begin(115200);
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3D for 128x64
     Serial.println(F("SSD1306 allocation failed"));
@@ -86,6 +102,14 @@ void loop() {
   if (digitalRead(BUTTON_PIN) == HIGH) {
      if (!buttonWasPressed) {
       buttonPressed = true;
+          if (isDayGraph == true) {
+        isDayGraph = false;
+        } else {
+          isDayGraph = true;
+        }
+
+      Serial.println("button " + String(isDayGraph));
+      
       buttonWasPressed = true;
      } else {
       buttonPressed = false;
@@ -94,18 +118,23 @@ void loop() {
   buttonWasPressed = false;
  }
 
-  if (buttonPressed) {
-    Serial.println("Button");
-    buttonPressed = false;
-  }
  
   if (millis()-timer > MEASURE_DELAY) {//задержка нужна чтобы не опрашивать датчик слишком часто
   timer = millis();
   dispCO2 = mhz19.getPPM();
   updateKalmanArray(dispCO2, kalmanMeasuresArray);
-  updateChartArray(chartValues, kalmanMeasuresArray, &chartValuesCount, &currentMeasureCount, measuresNumber);
-  drawGraph(chartValues, CHART_SIZE, &chartValuesCount, dispCO2);
+  updateKalmanArray(dispCO2, kalmanMeasuresArray24);
+  updateChartArray(chartValues, kalmanMeasuresArray, &chartValuesCount, &currentMeasureCount, measuresForTick);
+  updateChartArray(chartValues24, kalmanMeasuresArray24, &chartValuesCount24, &currentMeasureCount24, measuresForTick24);
+  if (currentMeasureCount24 == 0) {
+  saveArrayToEEPROM(chartValues24, chartValuesCount24, 0, CHART_SIZE);
+  }
   setColorByCo2(dispCO2);
+  }
+  if (isDayGraph) {
+  drawGraph(chartValues24, CHART_SIZE, &chartValuesCount24, dispCO2, isDayGraph);
+  } else {
+  drawGraph(chartValues, CHART_SIZE, &chartValuesCount, dispCO2, isDayGraph);  
   }
  }
 
@@ -116,6 +145,21 @@ void updateKalmanArray(int currentValue, int* kalmanArray)  {//добавляе�
     }
     kalmanArray[KALMAN_ARRAY_SIZE-1] = currentValue;
 }
+
+
+void saveArrayToEEPROM(int* arrray, int graphPosition, int address, int arrLen) {
+
+  struct SaveStruct save;
+  for (int i=0; i<arrLen; i++) {
+    save.values[i] = arrray[i];
+  }
+  save.graphPosition = graphPosition;
+  SaveStruct load;
+  eeprom_write_block((void*)&save, address, sizeof(save));
+  eeprom_read_block((void*)&load, address, sizeof(load));
+  Serial.println("eeprom " + String(load.values[0]) + " " + String(load.values[1]) + " " + String(load.values[2]));
+}
+
  
 void updateChartArray(int* chart, int* kalmanArray, int* chartCount, int* measureCount, int measuresForTick) {
     (*measureCount)++;
@@ -129,7 +173,7 @@ void updateChartArray(int* chart, int* kalmanArray, int* chartCount, int* measur
     (*chartCount)++;
   }
   int filterResult = kalmanFilter(kalmanArray, KALMAN_ARRAY_SIZE, 15);
-  Serial.println("filterResult: " + String(filterResult) + " measureCount: " + String(*measureCount) + "/" + String(measuresNumber));
+  Serial.println("filterResult: " + String(filterResult) + " measureCount: " + String(*measureCount) + "/" + String(measuresForTick));
   if (*measureCount <= 1) {
     chart[0] = filterResult;
   } else {
@@ -146,7 +190,7 @@ void updateChartArray(int* chart, int* kalmanArray, int* chartCount, int* measur
   
 }
 
-void drawGraph(int* values, int values_size, int* chartCount, int current_val) {
+void drawGraph(int* values, int values_size, int* chartCount, int current_val, boolean isHours) {
 
   int maxValue = 0;
   int lowestValueDifference = 100; //это будет минимальный разброс значений на графике между максимальным и минимальным
@@ -154,22 +198,19 @@ void drawGraph(int* values, int values_size, int* chartCount, int current_val) {
   int graphStartPositionX = 47;
   int graphStartPositionY = 0;
 
-
-  
-
   for (int i = 0; i < CHART_SIZE && i < *chartCount; i++) {
     if (values[i] < minValue) {minValue = values[i];}
     if (values[i] > maxValue) {maxValue = values[i];}
   }
 
-  Serial.println("heightRatio " + String(CHART_SIZE)+ " " + String(*chartCount)+ " " + String(maxValue)+ " " + String(minValue));
+  //Serial.println("heightRatio " + String(CHART_SIZE)+ " " + String(*chartCount)+ " " + String(maxValue)+ " " + String(minValue));
 
   if (minValue > lowestValueDifference && (maxValue-minValue < lowestValueDifference)) {
     minValue = minValue - lowestValueDifference;
   }
   
   float heightRatio = (float)SCREEN_HEIGHT/(maxValue-minValue);
-  Serial.println("heightRatio " + String(heightRatio)+ " " + String(minValue)+ " " + String(maxValue)+ " ");
+  //Serial.println("heightRatio " + String(heightRatio)+ " " + String(minValue)+ " " + String(maxValue)+ " ");
 
   display.clearDisplay();
 
@@ -190,6 +231,14 @@ void drawGraph(int* values, int values_size, int* chartCount, int current_val) {
   display.setTextSize(2);
   display.setCursor(0, 9);
   display.print(String(current_val));
+
+   display.setTextSize(1);
+   display.setCursor(0, 25);
+  if (isHours) {
+       display.print("11h");
+  } else {
+       display.print("32m");
+  }
 
   display.display();    //draw
 }
