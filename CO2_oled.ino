@@ -31,7 +31,7 @@ int const MEASURE_DELAY = 5500; // ms, задержка между измере�
 unsigned long timer;
 
 long const GRAPH_TICK_TIME_RANGE = 27500; //ms
-long const GRAPH_TICK_TIME_RANGE24 = 600000; //ms
+long const GRAPH_TICK_TIME_RANGE24 = 600000; //ms 600000
 int measuresForTick;//сколько проводить измерений на столбец графика  измерений должно быть БОЛЬШЕ!!!, чем значений в массиве калмана  = GRAPH_TICK_TIME_RANGE/MEASURE_DELAY;
 int kalmanMeasuresArray[KALMAN_ARRAY_SIZE];//массив для фильтра Калмана (сглаживание нескольких последних значений)
 int currentMeasureCount = 0;//сколько всего изменений провели для текущего столбца
@@ -71,6 +71,9 @@ void setup() {
     Serial.println(F("SSD1306 allocation failed"));
     for(;;);
   }
+
+delay(2000);
+  loadEEPROMToArray(chartValues24, chartValuesCount24, 0, CHART_SIZE);
   pinMode(BUTTON_PIN, INPUT);
   display.clearDisplay();
   display.setTextSize(2);
@@ -148,16 +151,24 @@ void updateKalmanArray(int currentValue, int* kalmanArray)  {//добавляе�
 
 
 void saveArrayToEEPROM(int* arrray, int graphPosition, int address, int arrLen) {
-
   struct SaveStruct save;
   for (int i=0; i<arrLen; i++) {
     save.values[i] = arrray[i];
   }
   save.graphPosition = graphPosition;
-  SaveStruct load;
   eeprom_write_block((void*)&save, address, sizeof(save));
+  Serial.println("eeprom saved. First 3 vals: " + String(chartValuesCount24) + " " + String(save.values[0]) + " " + String(save.values[1]) + " " + String(save.values[2]));
+}
+
+void loadEEPROMToArray(int* arrray, int* graphPosition, int address, int arrLen) {
+  struct SaveStruct load;
   eeprom_read_block((void*)&load, address, sizeof(load));
-  Serial.println("eeprom " + String(load.values[0]) + " " + String(load.values[1]) + " " + String(load.values[2]));
+  for (int i=0; i<arrLen; i++) {
+     arrray[i] = load.values[i];
+  }
+  *graphPosition = load.graphPosition;
+  int pos = *graphPosition;
+  Serial.println("eeprom loaded. First 3 vals: " + String(pos) + " " + String(load.values[0]) + " " + String(load.values[1]) + " " + String(load.values[2]));
 }
 
  
@@ -198,30 +209,26 @@ void drawGraph(int* values, int values_size, int* chartCount, int current_val, b
   int graphStartPositionX = 47;
   int graphStartPositionY = 0;
 
-  for (int i = 0; i < CHART_SIZE && i < *chartCount; i++) {
+  for (int i = 0; i < CHART_SIZE && i <= *chartCount; i++) {
     if (values[i] < minValue) {minValue = values[i];}
     if (values[i] > maxValue) {maxValue = values[i];}
   }
-
-  //Serial.println("heightRatio " + String(CHART_SIZE)+ " " + String(*chartCount)+ " " + String(maxValue)+ " " + String(minValue));
-
+  
   if (minValue > lowestValueDifference && (maxValue-minValue < lowestValueDifference)) {
     minValue = minValue - lowestValueDifference;
   }
   
   float heightRatio = (float)SCREEN_HEIGHT/(maxValue-minValue);
-  //Serial.println("heightRatio " + String(heightRatio)+ " " + String(minValue)+ " " + String(maxValue)+ " ");
 
   display.clearDisplay();
 
   for (int i = 0; i < CHART_SIZE; i++) {
-    int currentHeight = (float)(values[i]-minValue)*heightRatio;
-    //if (currentHeight > 0) {Serial.println("cur h " + String(i) + "=" + String(currentHeight));}
+    int currentHeight = (float)(values[i]*heightRatio) - (minValue*heightRatio);
     if (currentHeight < 1) {currentHeight=1;}
     display.fillRect(graphStartPositionX+i, SCREEN_HEIGHT-currentHeight, 1, currentHeight, 1);
+    //Serial.println("currentHeight " + String(values[i]) + " " + String(currentHeight) + " " + String(i) + " " + String(*chartCount));
   }
   
-  display.fillRect(50, 20, 1, 21, 1);
   display.setTextSize(1);
   display.setTextColor(WHITE);
   display.setCursor(20, 25);
