@@ -28,7 +28,9 @@ int dispCO2;
 #define CO2_MAX_VALUE 5000
 
 int const MEASURE_DELAY = 5500; // ms, задержка между измерениями minimum = 5000, быстрее mhx19 просто не обновляется
-unsigned long timer;
+unsigned long timer;//таймер замедления опроса датчика
+unsigned long longPushTimer;//таймер для кнопки
+int const LONG_PUSH_TIME = 5000;
 
 long const GRAPH_TICK_TIME_RANGE = 27500; //ms
 long const GRAPH_TICK_TIME_RANGE24 = 600000; //ms 600000
@@ -46,6 +48,7 @@ int chartValuesCount24 = 0; //считаем сколько столбцов з�
 
 boolean buttonWasPressed = false;
 boolean buttonPressed = false;
+boolean longPress = false;
 boolean isDayGraph = false;
 
 int redP = 5;
@@ -71,9 +74,7 @@ void setup() {
     Serial.println(F("SSD1306 allocation failed"));
     for(;;);
   }
-
-delay(2000);
-  loadEEPROMToArray(chartValues24, chartValuesCount24, 0, CHART_SIZE);
+  loadEEPROMToArray(chartValues24, &chartValuesCount24, 0, CHART_SIZE);
   pinMode(BUTTON_PIN, INPUT);
   display.clearDisplay();
   display.setTextSize(2);
@@ -105,23 +106,25 @@ void loop() {
   if (digitalRead(BUTTON_PIN) == HIGH) {
      if (!buttonWasPressed) {
       buttonPressed = true;
+      longPushTimer = millis();
           if (isDayGraph == true) {
         isDayGraph = false;
         } else {
           isDayGraph = true;
         }
-
       Serial.println("button " + String(isDayGraph));
-      
       buttonWasPressed = true;
      } else {
       buttonPressed = false;
       }
  } else {
+  longPushTimer = millis();
   buttonWasPressed = false;
  }
-
- 
+if (millis()-longPushTimer > LONG_PUSH_TIME) {
+  Serial.println("RESET SAVED VALUES");
+  setZeroToSavedArray(chartValues24, CHART_SIZE, &chartValuesCount24, &currentMeasureCount24);
+}
   if (millis()-timer > MEASURE_DELAY) {//задержка нужна чтобы не опрашивать датчик слишком часто
   timer = millis();
   dispCO2 = mhz19.getPPM();
@@ -141,6 +144,15 @@ void loop() {
   }
  }
 
+
+void setZeroToSavedArray(int* arrray, int arrLen, int *chartCount, int *measuresCount) {
+  for (int i = 0; i < arrLen; i++) {
+      arrray[i] = 0;
+    }
+    *measuresCount = 0;
+    *chartCount = 0;
+    Serial.println("setZeroToSavedArray");
+}
  
 void updateKalmanArray(int currentValue, int* kalmanArray)  {//добавляем измерение в хвост массива
     for (int i = 0; i < KALMAN_ARRAY_SIZE-1; i++) {
@@ -157,7 +169,7 @@ void saveArrayToEEPROM(int* arrray, int graphPosition, int address, int arrLen) 
   }
   save.graphPosition = graphPosition;
   eeprom_write_block((void*)&save, address, sizeof(save));
-  Serial.println("eeprom saved. First 3 vals: " + String(chartValuesCount24) + " " + String(save.values[0]) + " " + String(save.values[1]) + " " + String(save.values[2]));
+  Serial.println("eeprom saved. Pos: " + String(save.graphPosition) + ". Head vals: " + String(save.values[0]) + " " + String(save.values[1]) + " " + String(save.values[2]));
 }
 
 void loadEEPROMToArray(int* arrray, int* graphPosition, int address, int arrLen) {
@@ -168,7 +180,7 @@ void loadEEPROMToArray(int* arrray, int* graphPosition, int address, int arrLen)
   }
   *graphPosition = load.graphPosition;
   int pos = *graphPosition;
-  Serial.println("eeprom loaded. First 3 vals: " + String(pos) + " " + String(load.values[0]) + " " + String(load.values[1]) + " " + String(load.values[2]));
+  Serial.println("eeprom loaded. Pos: " + String(*graphPosition) + ". Head vals: " + String(load.values[0]) + " " + String(load.values[1]) + " " + String(load.values[2]));
 }
 
  
@@ -179,12 +191,16 @@ void updateChartArray(int* chart, int* kalmanArray, int* chartCount, int* measur
         //Serial.println("ch: " + String(chart[i]) + " " + String(chart[i-1]));
         chart[i] = chart[i-1];
       }
-    if (*chartCount >= CHART_SIZE) { *chartCount = CHART_SIZE; }
+    if (*chartCount >= CHART_SIZE) { 
+      *chartCount = CHART_SIZE; 
+      } else {
+      (*chartCount)++;
+        }
     *measureCount = 0;
-    (*chartCount)++;
+
   }
   int filterResult = kalmanFilter(kalmanArray, KALMAN_ARRAY_SIZE, 15);
-  Serial.println("filterResult: " + String(filterResult) + " measureCount: " + String(*measureCount) + "/" + String(measuresForTick));
+  //Serial.println("filterResult: " + String(filterResult) + " measureCount: " + String(*measureCount) + "/" + String(measuresForTick));
   if (*measureCount <= 1) {
     chart[0] = filterResult;
   } else {
@@ -197,8 +213,7 @@ void updateChartArray(int* chart, int* kalmanArray, int* chartCount, int* measur
     st = st + " " + String(chart[i]) + "["+String(i)+"]";
   }
   st = st + " " + String(chart[68]) + "[68]" + " " + String(chart[69]) + "[69]" + "\n";
-  Serial.println("graph: " + st);
-  
+  //Serial.println("graph: " + st); 
 }
 
 void drawGraph(int* values, int values_size, int* chartCount, int current_val, boolean isHours) {
