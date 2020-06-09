@@ -34,6 +34,7 @@ unsigned long longPushTimer;//таймер для кнопки
 int const LONG_PUSH_TIME = 5000;
 
 long const GRAPH_TICK_TIME_RANGE = 27500; //ms
+long const GRAPH_TICK_TIME_RANGE3 = 154000; //ms
 long const GRAPH_TICK_TIME_RANGE24 = 600000; //ms 600000
 int measuresForTick;//сколько проводить измерений на столбец графика  измерений должно быть БОЛЬШЕ!!!, чем значений в массиве калмана  = GRAPH_TICK_TIME_RANGE/MEASURE_DELAY;
 int kalmanMeasuresArray[KALMAN_ARRAY_SIZE];//массив для фильтра Калмана (сглаживание нескольких последних значений)
@@ -47,10 +48,16 @@ int currentMeasureCount24 = 0;//сколько всего изменений п�
 int chartValues24[CHART_SIZE]; //70 столбцов в графике = 11 часов, если по 10 минут столбец или около 30 минут, если по 27.5 секунд
 int chartValuesCount24 = 0; //считаем сколько столбцов заполнено, чтобы сдвигать график или дополнять
 
+int measuresForTick3;//сколько проводить измерений на столбец графика  измерений должно быть БОЛЬШЕ!!!, чем значений в массиве калмана
+int kalmanMeasuresArray3[KALMAN_ARRAY_SIZE];//массив для фильтра Калмана (сглаживание нескольких последних значений)
+int currentMeasureCount3 = 0;//сколько всего изменений провели для текущего столбца
+int chartValues3[CHART_SIZE]; //70 столбцов в графике = 11 часов, если по 10 минут столбец или около 30 минут, если по 27.5 секунд
+int chartValuesCount3 = 0; //считаем сколько столбцов заполнено, чтобы сдвигать график или дополнять
+
 boolean buttonWasPressed = false;
 boolean buttonPressed = false;
 boolean longPress = false;
-boolean isDayGraph = false;
+int graphMode = 0;
 
 int redP = 5;
 int greenP = 6;
@@ -69,14 +76,17 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 void setup() {
   measuresForTick = GRAPH_TICK_TIME_RANGE/MEASURE_DELAY;
+  measuresForTick3 = GRAPH_TICK_TIME_RANGE3/MEASURE_DELAY;
   measuresForTick24 = GRAPH_TICK_TIME_RANGE24/MEASURE_DELAY;
+  
   Serial.begin(115200);
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3D for 128x64
     Serial.println(F("SSD1306 allocation failed"));
     for(;;);
   }
-  loadEEPROMToArray(chartValues24, &chartValuesCount24, 0, CHART_SIZE);
-  loadEEPROMToArray(chartValues, &chartValuesCount, 1, CHART_SIZE);
+  loadEEPROMToArray(chartValues, &chartValuesCount, 0, CHART_SIZE);
+  loadEEPROMToArray(chartValues3, &chartValuesCount3, 1, CHART_SIZE);
+  loadEEPROMToArray(chartValues24, &chartValuesCount24, 2, CHART_SIZE);
   pinMode(BUTTON_PIN, INPUT);
   display.clearDisplay();
   display.setTextSize(2);
@@ -109,12 +119,18 @@ void loop() {
      if (!buttonWasPressed) {
       buttonPressed = true;
       longPushTimer = millis();
-          if (isDayGraph == true) {
-        isDayGraph = false;
-        } else {
-          isDayGraph = true;
-        }
-      Serial.println("button " + String(isDayGraph));
+      switch(graphMode)
+      {
+        case 0:
+        graphMode = 1;
+        break;
+        case 1:
+        graphMode = 2;
+        break;
+        case 2:
+        graphMode = 0;
+        break;
+      }
       buttonWasPressed = true;
      } else {
       buttonPressed = false;
@@ -125,31 +141,47 @@ void loop() {
  }
 if (millis()-longPushTimer > LONG_PUSH_TIME) {
   Serial.println("RESET SAVED VALUES");
-  setZeroToSavedArray(chartValues24, CHART_SIZE, &chartValuesCount24, &currentMeasureCount24);
-  saveArrayToEEPROM(chartValues24, chartValuesCount24, 0, CHART_SIZE);
   setZeroToSavedArray(chartValues, CHART_SIZE, &chartValuesCount, &currentMeasureCount);
-  saveArrayToEEPROM(chartValues, chartValuesCount, 1, CHART_SIZE);
+  saveArrayToEEPROM(chartValues, chartValuesCount, 0, CHART_SIZE);
+  setZeroToSavedArray(chartValues3, CHART_SIZE, &chartValuesCount3, &currentMeasureCount3);
+  saveArrayToEEPROM(chartValues3, chartValuesCount3, 1, CHART_SIZE);
+  setZeroToSavedArray(chartValues24, CHART_SIZE, &chartValuesCount24, &currentMeasureCount24);
+  saveArrayToEEPROM(chartValues24, chartValuesCount24, 2, CHART_SIZE);
 }
   if (millis()-timer > MEASURE_DELAY) {//задержка нужна чтобы не опрашивать датчик слишком часто
   timer = millis();
   dispCO2 = mhz19.getPPM();
   updateKalmanArray(dispCO2, kalmanMeasuresArray);
+  updateKalmanArray(dispCO2, kalmanMeasuresArray3);
   updateKalmanArray(dispCO2, kalmanMeasuresArray24);
   updateChartArray(chartValues, kalmanMeasuresArray, &chartValuesCount, &currentMeasureCount, measuresForTick);
+  updateChartArray(chartValues3, kalmanMeasuresArray3, &chartValuesCount3, &currentMeasureCount3, measuresForTick3);
   updateChartArray(chartValues24, kalmanMeasuresArray24, &chartValuesCount24, &currentMeasureCount24, measuresForTick24);
-  
-  if (currentMeasureCount24 == 0) {
-  saveArrayToEEPROM(chartValues24, chartValuesCount24, 0, CHART_SIZE);
-  }
+
+
   if (currentMeasureCount == 0) {
-  saveArrayToEEPROM(chartValues, chartValuesCount, 1, CHART_SIZE);
+  saveArrayToEEPROM(chartValues, chartValuesCount, 0, CHART_SIZE);
   }
+  if (currentMeasureCount3 == 0) {
+  saveArrayToEEPROM(chartValues3, chartValuesCount3, 1, CHART_SIZE);
+  }
+  if (currentMeasureCount24 == 0) {
+  saveArrayToEEPROM(chartValues24, chartValuesCount24, 2, CHART_SIZE);
+  }
+ 
   setColorByCo2(dispCO2);
   }
-  if (isDayGraph) {
-  drawGraph(chartValues24, CHART_SIZE, &chartValuesCount24, dispCO2, isDayGraph);
-  } else {
-  drawGraph(chartValues, CHART_SIZE, &chartValuesCount, dispCO2, isDayGraph);  
+  switch(graphMode) {
+    case 0:
+    drawGraph(chartValues, CHART_SIZE, &chartValuesCount, dispCO2, graphMode);  
+    break;
+    case 1:
+    drawGraph(chartValues3, CHART_SIZE, &chartValuesCount3, dispCO2, graphMode);
+    break;
+    case 2:
+    drawGraph(chartValues24, CHART_SIZE, &chartValuesCount24, dispCO2, graphMode);
+    break;
+   
   }
  }
 
@@ -225,7 +257,7 @@ void updateChartArray(int* chart, int* kalmanArray, int* chartCount, int* measur
   //Serial.println("graph: " + st); 
 }
 
-void drawGraph(int* values, int values_size, int* chartCount, int current_val, boolean isHours) {
+void drawGraph(int* values, int values_size, int* chartCount, int current_val, int mode) {
 
   int maxValue = 0;
   int lowestValueDifference = 100; //это будет минимальный разброс значений на графике между максимальным и минимальным
@@ -265,12 +297,19 @@ void drawGraph(int* values, int values_size, int* chartCount, int current_val, b
 
    display.setTextSize(1);
    display.setCursor(0, 25);
-  if (isHours) {
-       display.print("11h");
-  } else {
-       display.print("32m");
+  
+  switch(mode) {
+  case 0:
+  display.print("32m");
+  break;
+  case 1:
+  display.print("3h");
+  break;
+  case 2:
+  display.print("11h");
+  break;
   }
-
+  
   display.display();    //draw
 }
 
