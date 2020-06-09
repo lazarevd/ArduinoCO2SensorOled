@@ -14,6 +14,7 @@
 MHZ19_uart mhz19;
 int dispCO2;
 
+#define FLOAT_TO_INT(x) ((x)>=0?(int)((x)+0.5):(int)((x)-0.5))
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 32 // OLED display height, in pixels
 #define MHZ_RX 8
@@ -75,6 +76,7 @@ void setup() {
     for(;;);
   }
   loadEEPROMToArray(chartValues24, &chartValuesCount24, 0, CHART_SIZE);
+  loadEEPROMToArray(chartValues, &chartValuesCount, 1, CHART_SIZE);
   pinMode(BUTTON_PIN, INPUT);
   display.clearDisplay();
   display.setTextSize(2);
@@ -124,6 +126,9 @@ void loop() {
 if (millis()-longPushTimer > LONG_PUSH_TIME) {
   Serial.println("RESET SAVED VALUES");
   setZeroToSavedArray(chartValues24, CHART_SIZE, &chartValuesCount24, &currentMeasureCount24);
+  saveArrayToEEPROM(chartValues24, chartValuesCount24, 0, CHART_SIZE);
+  setZeroToSavedArray(chartValues, CHART_SIZE, &chartValuesCount, &currentMeasureCount);
+  saveArrayToEEPROM(chartValues, chartValuesCount, 1, CHART_SIZE);
 }
   if (millis()-timer > MEASURE_DELAY) {//задержка нужна чтобы не опрашивать датчик слишком часто
   timer = millis();
@@ -132,8 +137,12 @@ if (millis()-longPushTimer > LONG_PUSH_TIME) {
   updateKalmanArray(dispCO2, kalmanMeasuresArray24);
   updateChartArray(chartValues, kalmanMeasuresArray, &chartValuesCount, &currentMeasureCount, measuresForTick);
   updateChartArray(chartValues24, kalmanMeasuresArray24, &chartValuesCount24, &currentMeasureCount24, measuresForTick24);
+  
   if (currentMeasureCount24 == 0) {
   saveArrayToEEPROM(chartValues24, chartValuesCount24, 0, CHART_SIZE);
+  }
+  if (currentMeasureCount == 0) {
+  saveArrayToEEPROM(chartValues, chartValuesCount, 1, CHART_SIZE);
   }
   setColorByCo2(dispCO2);
   }
@@ -168,13 +177,13 @@ void saveArrayToEEPROM(int* arrray, int graphPosition, int address, int arrLen) 
     save.values[i] = arrray[i];
   }
   save.graphPosition = graphPosition;
-  eeprom_write_block((void*)&save, address, sizeof(save));
+  eeprom_write_block((void*)&save, address*sizeof(save), sizeof(save));
   Serial.println("eeprom saved. Pos: " + String(save.graphPosition) + ". Head vals: " + String(save.values[0]) + " " + String(save.values[1]) + " " + String(save.values[2]));
 }
 
 void loadEEPROMToArray(int* arrray, int* graphPosition, int address, int arrLen) {
   struct SaveStruct load;
-  eeprom_read_block((void*)&load, address, sizeof(load));
+  eeprom_read_block((void*)&load, address*sizeof(load), sizeof(load));
   for (int i=0; i<arrLen; i++) {
      arrray[i] = load.values[i];
   }
@@ -225,8 +234,8 @@ void drawGraph(int* values, int values_size, int* chartCount, int current_val, b
   int graphStartPositionY = 0;
 
   for (int i = 0; i < CHART_SIZE && i <= *chartCount; i++) {
-    if (values[i] < minValue) {minValue = values[i];}
-    if (values[i] > maxValue) {maxValue = values[i];}
+    if (values[i] < minValue) {minValue = (int)(values[i]/100)*100;}
+    if (values[i] > maxValue) {maxValue = FLOAT_TO_INT(values[i]/100)*100;}
   }
   
   if (minValue > lowestValueDifference && (maxValue-minValue < lowestValueDifference)) {
