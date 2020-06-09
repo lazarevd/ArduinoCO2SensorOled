@@ -267,7 +267,7 @@ void drawGraph(int* values, int values_size, int* chartCount, int current_val, i
 
   for (int i = 0; i < CHART_SIZE && i <= *chartCount; i++) {
     if (values[i] < minValue) {minValue = (int)(values[i]/100)*100;}
-    if (values[i] > maxValue) {maxValue = FLOAT_TO_INT(values[i]/100)*100;}
+    if (values[i] > maxValue) {maxValue = (int)((values[i]/100)+1)*100;}
   }
   
   if (minValue > lowestValueDifference && (maxValue-minValue < lowestValueDifference)) {
