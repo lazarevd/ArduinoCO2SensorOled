@@ -140,7 +140,7 @@ void loop() {
   buttonWasPressed = false;
  }
 if (millis()-longPushTimer > LONG_PUSH_TIME) {
-  Serial.println("RESET SAVED VALUES");
+  Serial.println(F("RESET SAVED VALUES"));
   setZeroToSavedArray(chartValues, CHART_SIZE, &chartValuesCount, &currentMeasureCount);
   saveArrayToEEPROM(chartValues, chartValuesCount, 0, CHART_SIZE);
   setZeroToSavedArray(chartValues3, CHART_SIZE, &chartValuesCount3, &currentMeasureCount3);
@@ -192,7 +192,6 @@ void setZeroToSavedArray(int* arrray, int arrLen, int *chartCount, int *measures
     }
     *measuresCount = 0;
     *chartCount = 0;
-    Serial.println("setZeroToSavedArray");
 }
  
 void updateKalmanArray(int currentValue, int* kalmanArray)  {//добавляем измерение в хвост массива
@@ -210,7 +209,6 @@ void saveArrayToEEPROM(int* arrray, int graphPosition, int address, int arrLen) 
   }
   save.graphPosition = graphPosition;
   eeprom_write_block((void*)&save, address*sizeof(save), sizeof(save));
-  Serial.println("eeprom saved. Pos: " + String(save.graphPosition) + ". Head vals: " + String(save.values[0]) + " " + String(save.values[1]) + " " + String(save.values[2]));
 }
 
 void loadEEPROMToArray(int* arrray, int* graphPosition, int address, int arrLen) {
@@ -221,7 +219,6 @@ void loadEEPROMToArray(int* arrray, int* graphPosition, int address, int arrLen)
   }
   *graphPosition = load.graphPosition;
   int pos = *graphPosition;
-  Serial.println("eeprom loaded. Pos: " + String(*graphPosition) + ". Head vals: " + String(load.values[0]) + " " + String(load.values[1]) + " " + String(load.values[2]));
 }
 
  
@@ -229,7 +226,6 @@ void updateChartArray(int* chart, int* kalmanArray, int* chartCount, int* measur
     (*measureCount)++;
     if (*measureCount >= measuresForTick) {//когда измерений на столбец достаточно, смещаем предыдущие значения
       for (int i = CHART_SIZE-1 ; i >= 1; i--) {
-        //Serial.println("ch: " + String(chart[i]) + " " + String(chart[i-1]));
         chart[i] = chart[i-1];
       }
     if (*chartCount >= CHART_SIZE) { 
@@ -241,20 +237,11 @@ void updateChartArray(int* chart, int* kalmanArray, int* chartCount, int* measur
 
   }
   int filterResult = kalmanFilter(kalmanArray, KALMAN_ARRAY_SIZE, 15);
-  //Serial.println("filterResult: " + String(filterResult) + " measureCount: " + String(*measureCount) + "/" + String(measuresForTick));
   if (*measureCount <= 1) {
     chart[0] = filterResult;
   } else {
     chart[0] = (chart[0]+filterResult)/2;//находим среднее арифметическое за период одного столбца (по умолчанию 10 минут). Если между изменениями у нас 5500 милиисекунд, то 600000мс/5500мс = 109 измерений
   }
-    //////////
-    
-  String st = String(chart[0]) + "[0]" + " " + String(chart[1]) + "[1]" + " " + String(chart[2]) + "[2]" + " " + String(chart[3]) + "[3]";
-  for(int i=5; i < CHART_SIZE; i = i + 5) {
-    st = st + " " + String(chart[i]) + "["+String(i)+"]";
-  }
-  st = st + " " + String(chart[68]) + "[68]" + " " + String(chart[69]) + "[69]" + "\n";
-  //Serial.println("graph: " + st); 
 }
 
 void drawGraph(int* values, int values_size, int* chartCount, int current_val, int mode) {
@@ -282,18 +269,17 @@ void drawGraph(int* values, int values_size, int* chartCount, int current_val, i
     int currentHeight = (float)(values[i]*heightRatio) - (minValue*heightRatio);
     if (currentHeight < 1) {currentHeight=1;}
     display.fillRect(graphStartPositionX+i, SCREEN_HEIGHT-currentHeight, 1, currentHeight, 1);
-    //Serial.println("currentHeight " + String(values[i]) + " " + String(currentHeight) + " " + String(i) + " " + String(*chartCount));
   }
   
   display.setTextSize(1);
   display.setTextColor(WHITE);
   display.setCursor(20, 25);
-  display.print(String(minValue));
+  display.print(minValue);
   display.setCursor(20, 0);
-  display.print(String(maxValue));
+  display.print(maxValue);
   display.setTextSize(2);
   display.setCursor(0, 9);
-  display.print(String(current_val));
+  display.print(current_val);
 
    display.setTextSize(1);
    display.setCursor(0, 25);
