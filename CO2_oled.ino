@@ -28,6 +28,10 @@ int dispCO2;
 #define CO2_YELLOW_MAX 2000
 #define CO2_MAX_VALUE 5000
 
+#define DIODE_RED_PIN 5
+#define DIODE_GREEN_PIN 6
+#define DIODE_BLUE_PIN 10
+
 int const MEASURE_DELAY = 5500; // ms, задержка между измерениями minimum = 5000, быстрее mhx19 просто не обновляется
 unsigned long timer;//таймер замедления опроса датчика
 unsigned long longPushTimer;//таймер для кнопки
@@ -59,9 +63,6 @@ boolean buttonPressed = false;
 boolean longPress = false;
 int graphMode = 0;
 
-int redP = 5;
-int greenP = 6;
-int blueP = 10;
 
 
 
@@ -159,13 +160,13 @@ if (millis()-longPushTimer > LONG_PUSH_TIME) {
 
 
   if (currentMeasureCount == 0) {
-  //saveArrayToEEPROM(chartValues, chartValuesCount, 0, CHART_SIZE);
+  saveArrayToEEPROM(chartValues, chartValuesCount, 0, CHART_SIZE);
   }
   if (currentMeasureCount3 == 0) {
-  //saveArrayToEEPROM(chartValues3, chartValuesCount3, 1, CHART_SIZE);
+  saveArrayToEEPROM(chartValues3, chartValuesCount3, 1, CHART_SIZE);
   }
   if (currentMeasureCount24 == 0) {
-  //saveArrayToEEPROM(chartValues24, chartValuesCount24, 2, CHART_SIZE);
+  saveArrayToEEPROM(chartValues24, chartValuesCount24, 2, CHART_SIZE);
   }
  
   setColorByCo2(dispCO2);
@@ -343,7 +344,7 @@ int kalmanFilter(int inputArray[], int arrSize, float r) {//r - тут степ�
 
 void setColor(int red, int green, int blue, float k)
 {
-analogWrite(redP, red*k);
-analogWrite(greenP, green*k);
-analogWrite(blueP, blue*k);
+analogWrite(DIODE_RED_PIN, red*k);
+analogWrite(DIODE_GREEN_PIN, green*k);
+analogWrite(DIODE_BLUE_PIN, blue*k);
 }
