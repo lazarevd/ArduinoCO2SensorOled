@@ -93,7 +93,7 @@ void setup() {
   display.setTextColor(WHITE);
   display.setCursor(0, 10);
   // Display static text
-  display.println("Starting...");
+  display.println(F("Starting..."));
   display.display(); 
 
 // CO2 sensor 
@@ -140,7 +140,6 @@ void loop() {
   buttonWasPressed = false;
  }
 if (millis()-longPushTimer > LONG_PUSH_TIME) {
-  Serial.println(F("RESET SAVED VALUES"));
   setZeroToSavedArray(chartValues, CHART_SIZE, &chartValuesCount, &currentMeasureCount);
   saveArrayToEEPROM(chartValues, chartValuesCount, 0, CHART_SIZE);
   setZeroToSavedArray(chartValues3, CHART_SIZE, &chartValuesCount3, &currentMeasureCount3);
@@ -160,13 +159,13 @@ if (millis()-longPushTimer > LONG_PUSH_TIME) {
 
 
   if (currentMeasureCount == 0) {
-  saveArrayToEEPROM(chartValues, chartValuesCount, 0, CHART_SIZE);
+  //saveArrayToEEPROM(chartValues, chartValuesCount, 0, CHART_SIZE);
   }
   if (currentMeasureCount3 == 0) {
-  saveArrayToEEPROM(chartValues3, chartValuesCount3, 1, CHART_SIZE);
+  //saveArrayToEEPROM(chartValues3, chartValuesCount3, 1, CHART_SIZE);
   }
   if (currentMeasureCount24 == 0) {
-  saveArrayToEEPROM(chartValues24, chartValuesCount24, 2, CHART_SIZE);
+  //saveArrayToEEPROM(chartValues24, chartValuesCount24, 2, CHART_SIZE);
   }
  
   setColorByCo2(dispCO2);
@@ -286,13 +285,13 @@ void drawGraph(int* values, int values_size, int* chartCount, int current_val, i
   
   switch(mode) {
   case 0:
-  display.print("32m");
+  display.print(F("32m"));
   break;
   case 1:
-  display.print("3h");
+  display.print(F("3h"));
   break;
   case 2:
-  display.print("11h");
+  display.print(F("11h"));
   break;
   }
   
