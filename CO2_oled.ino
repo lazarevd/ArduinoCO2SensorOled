@@ -36,7 +36,6 @@ int const MEASURE_DELAY = 5500; // ms, задержка между измере�
 unsigned long timer;//таймер замедления опроса датчика
 unsigned long longPushTimer;//таймер для кнопки
 int const LONG_PUSH_TIME = 5000;
-
 long const GRAPH_TICK_TIME_RANGE = 27500; //ms
 long const GRAPH_TICK_TIME_RANGE3 = 154000; //ms
 long const GRAPH_TICK_TIME_RANGE24 = 600000; //ms 600000
@@ -62,9 +61,6 @@ boolean buttonWasPressed = false;
 boolean buttonPressed = false;
 boolean longPress = false;
 int graphMode = 0;
-
-
-
 
   struct SaveStruct {//структура для сохранения суточного графика
     int values[CHART_SIZE];
@@ -124,12 +120,15 @@ void loop() {
       {
         case 0:
         graphMode = 1;
+        drawGraph(chartValues3, CHART_SIZE, &chartValuesCount3, dispCO2, graphMode);
         break;
         case 1:
         graphMode = 2;
+        drawGraph(chartValues24, CHART_SIZE, &chartValuesCount24, dispCO2, graphMode);
         break;
         case 2:
         graphMode = 0;
+        drawGraph(chartValues, CHART_SIZE, &chartValuesCount, dispCO2, graphMode); 
         break;
       }
       buttonWasPressed = true;
@@ -168,10 +167,8 @@ if (millis()-longPushTimer > LONG_PUSH_TIME) {
   if (currentMeasureCount24 == 0) {
   saveArrayToEEPROM(chartValues24, chartValuesCount24, 2, CHART_SIZE);
   }
- 
-  setColorByCo2(dispCO2);
-  }
-  switch(graphMode) {
+    setColorByCo2(dispCO2);
+    switch(graphMode) {
     case 0:
     drawGraph(chartValues, CHART_SIZE, &chartValuesCount, dispCO2, graphMode);  
     break;
@@ -181,7 +178,7 @@ if (millis()-longPushTimer > LONG_PUSH_TIME) {
     case 2:
     drawGraph(chartValues24, CHART_SIZE, &chartValuesCount24, dispCO2, graphMode);
     break;
-   
+  }
   }
  }
 
@@ -244,6 +241,8 @@ void updateChartArray(int* chart, int* kalmanArray, int* chartCount, int* measur
   }
 }
 
+
+//TODO убрать из основного цикла в цикл с таймером
 void drawGraph(int* values, int values_size, int* chartCount, int current_val, int mode) {
 
   int maxValue = 0;
@@ -253,24 +252,29 @@ void drawGraph(int* values, int values_size, int* chartCount, int current_val, i
   int graphStartPositionY = 0;
 
   for (int i = 0; i < CHART_SIZE && i <= *chartCount; i++) {
-    if (values[i] < minValue) {minValue = (int)(values[i]/100)*100;}
-    if (values[i] > maxValue) {maxValue = (int)((values[i]/100)+1)*100;}
+    if (values[i] < minValue) {minValue = (int)(values[i]/100)*100;}//округляем значения до сотен
+    if (values[i] > maxValue) {maxValue = (int)(values[i]/100)*100;}
   }
-  
-  if (minValue > lowestValueDifference && (maxValue-minValue < lowestValueDifference)) {
-    minValue = minValue - lowestValueDifference;
-  }
-  
-  float heightRatio = (float)SCREEN_HEIGHT/(maxValue-minValue);
+
+   if (minValue < 0) {minValue == 0;}
+   if (maxValue < 0) {maxValue == 0;}
+   if (minValue > CO2_MAX_VALUE) {minValue == CO2_MAX_VALUE;}
+   if (maxValue > CO2_MAX_VALUE) {maxValue == CO2_MAX_VALUE;}
+
+  maxValue = maxValue + lowestValueDifference;
+
+
+  float heightRatio = SCREEN_HEIGHT/CO2_MAX_VALUE;//
+  if (maxValue > minValue) {
+   heightRatio = (float)SCREEN_HEIGHT/(maxValue-minValue);
+   }
 
   display.clearDisplay();
-
   for (int i = 0; i < CHART_SIZE; i++) {
-    int currentHeight = (float)(values[i]*heightRatio) - (minValue*heightRatio);
+    int currentHeight = (float)(values[i] - minValue)*heightRatio;
     if (currentHeight < 1) {currentHeight=1;}
-    display.fillRect(graphStartPositionX+i, SCREEN_HEIGHT-currentHeight, 1, currentHeight, 1);
+    display.fillRect(graphStartPositionX+i, SCREEN_HEIGHT-currentHeight, 1, currentHeight, 1); 
   }
-  
   display.setTextSize(1);
   display.setTextColor(WHITE);
   display.setCursor(20, 25);
@@ -342,9 +346,10 @@ int kalmanFilter(int inputArray[], int arrSize, float r) {//r - тут степ�
 }
 
 
+
 void setColor(int red, int green, int blue, float k)
 {
-analogWrite(DIODE_RED_PIN, red*k);
-analogWrite(DIODE_GREEN_PIN, green*k);
-analogWrite(DIODE_BLUE_PIN, blue*k);
+    analogWrite(DIODE_RED_PIN, red*k);
+    analogWrite(DIODE_GREEN_PIN, green*k);
+    analogWrite(DIODE_BLUE_PIN, blue*k);
 }
